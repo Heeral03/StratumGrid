@@ -1,6 +1,5 @@
 /**
- * FleetScale — Dashboard Controller & Tab Switcher
- * Light Theme Edition
+ * FleetScale — Dashboard Controller, WebSockets & Heartbeat Simulator
  */
 
 const API = "";
@@ -20,6 +19,11 @@ const btnUnlock        = document.getElementById("btn-unlock");
 const btnUpgrade       = document.getElementById("btn-upgrade");
 const btnRefresh       = document.getElementById("btn-refresh");
 
+const btnSendHb        = document.getElementById("btn-send-hb");
+const btnSimCrash      = document.getElementById("btn-sim-crash");
+const chkAutoHb        = document.getElementById("chk-auto-hb");
+const wsStatusText     = document.getElementById("ws-status-text");
+
 const toast            = document.getElementById("response-toast");
 const toastIcon        = document.getElementById("toast-icon");
 const toastMsg         = document.getElementById("toast-msg");
@@ -29,16 +33,25 @@ const auditCount       = document.getElementById("audit-count");
 // ── State ─────────────────────────────────────────────────────
 let currentTree  = null;
 let selectedNode = null;
+let ws           = null;
+let heartbeatInterval = null;
 
 // ── Initialization ────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", () => {
     setupTabNavigation();
+    setupWebSocket();
     loadAll();
 
     btnLock.addEventListener("click", () => doAction("lock"));
     btnUnlock.addEventListener("click", () => doAction("unlock"));
     btnUpgrade.addEventListener("click", () => doAction("upgrade"));
     btnRefresh.addEventListener("click", loadAll);
+
+    if (btnSendHb) btnSendHb.addEventListener("click", sendManualHeartbeat);
+    if (btnSimCrash) btnSimCrash.addEventListener("click", simulateBotCrash);
+
+    // Start Auto-Heartbeat pulse loop (every 10s)
+    startAutoHeartbeatLoop();
 });
 
 // ── Navigation Handler ────────────────────────────────────────
@@ -61,10 +74,50 @@ function switchView(viewName) {
         navLanding.classList.remove("active");
         dashboardView.classList.add("active");
         landingView.classList.remove("active");
-        // Re-render tree when switching to dashboard
         if (currentTree) {
             renderTree(currentTree);
         }
+    }
+}
+
+// ── WebSockets Stream ─────────────────────────────────────────
+function setupWebSocket() {
+    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl    = `${protocol}//${location.host}/ws/events`;
+
+    try {
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+            if (wsStatusText) wsStatusText.textContent = "WebSocket Active";
+        };
+
+        ws.onmessage = (event) => {
+            const msg = JSON.parse(event.data);
+
+            if (msg.tree) {
+                currentTree = msg.tree;
+                renderTree(currentTree);
+            }
+            if (msg.audit) {
+                renderAudit(msg.audit);
+            }
+
+            if (msg.type === "LEASE_EXPIRED") {
+                showToast(false, `⚠ Lease Expired: ${msg.detail.message}`);
+            }
+        };
+
+        ws.onclose = () => {
+            if (wsStatusText) wsStatusText.textContent = "WS Reconnecting...";
+            setTimeout(setupWebSocket, 3000);
+        };
+
+        ws.onerror = () => {
+            if (wsStatusText) wsStatusText.textContent = "WS Offline";
+        };
+    } catch (e) {
+        if (wsStatusText) wsStatusText.textContent = "WS Unsupported";
     }
 }
 
@@ -105,7 +158,6 @@ function buildTreeDOM(node) {
     card.className = "node-card";
     card.dataset.nodeId = node.id;
 
-    // Apply visual state classes
     if (node.is_locked) {
         card.classList.add("state-locked");
     } else if (node.locked_descendant_count > 0) {
@@ -118,12 +170,10 @@ function buildTreeDOM(node) {
         card.classList.add("selected");
     }
 
-    // Status Indicator Dot
     const dot = document.createElement("span");
     dot.className = "node-status-dot";
     card.appendChild(dot);
 
-    // Node Information
     const info = document.createElement("div");
     info.className = "node-info";
 
@@ -139,15 +189,21 @@ function buildTreeDOM(node) {
     info.appendChild(type);
     card.appendChild(info);
 
-    // Agent Ownership Badge
+    // Agent Ownership Badge & TTL Countdown Badge
     if (node.is_locked && node.locked_by) {
         const badge = document.createElement("span");
         badge.className = "node-agent-badge";
         badge.textContent = node.locked_by;
         card.appendChild(badge);
+
+        if (node.ttl_remaining > 0) {
+            const ttlBadge = document.createElement("span");
+            ttlBadge.className = "node-ttl-badge";
+            ttlBadge.textContent = `${node.ttl_remaining}s`;
+            card.appendChild(ttlBadge);
+        }
     }
 
-    // Click Selection
     card.addEventListener("click", (e) => {
         e.stopPropagation();
         selectedNode = node.id;
@@ -157,7 +213,6 @@ function buildTreeDOM(node) {
 
     li.appendChild(card);
 
-    // Recurse for children nodes
     if (node.children && node.children.length > 0) {
         const childUl = document.createElement("ul");
         childUl.className = "tree-level";
@@ -199,7 +254,7 @@ async function doAction(action) {
     let url, body;
     if (action === "lock") {
         url  = `${API}/api/v1/resource/lock`;
-        body = { node_id: nodeId, agent_id: agentId };
+        body = { node_id: nodeId, agent_id: agentId, ttl_seconds: 30 };
     } else if (action === "unlock") {
         url  = `${API}/api/v1/resource/unlock`;
         body = { node_id: nodeId, agent_id: agentId };
@@ -215,11 +270,75 @@ async function doAction(action) {
             body: JSON.stringify(body),
         });
         const data = await res.json();
-        showToast(data.success, data.message);
+        showToast(data.success, data.message || data.detail);
         await loadAll();
     } catch (err) {
         showToast(false, "Network error: unable to contact backend API.");
     }
+}
+
+// ── Heartbeat & Crash Simulator Handlers ──────────────────────
+async function sendManualHeartbeat() {
+    const agentId = agentSelect.value;
+    const nodeId  = nodeSelect.value;
+
+    if (!nodeId) {
+        showToast(false, "Select a target node to send heartbeat.");
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API}/api/v1/resource/heartbeat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ node_id: nodeId, agent_id: agentId, ttl_seconds: 30 }),
+        });
+        const data = await res.json();
+        showToast(data.success, data.message || data.detail);
+        await loadAll();
+    } catch (err) {
+        showToast(false, "Heartbeat failed.");
+    }
+}
+
+function simulateBotCrash() {
+    chkAutoHb.checked = false;
+    showToast(false, "🚨 Bot Crash Simulated! Auto-heartbeat stopped. Watch lock expire in 30 seconds!");
+}
+
+function startAutoHeartbeatLoop() {
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
+
+    heartbeatInterval = setInterval(async () => {
+        if (!chkAutoHb || !chkAutoHb.checked || !currentTree) return;
+
+        // Collect all locked nodes owned by agents and send heartbeats
+        const lockedNodes = getLockedNodes(currentTree);
+        for (const n of lockedNodes) {
+            try {
+                await fetch(`${API}/api/v1/resource/heartbeat`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ node_id: n.id, agent_id: n.locked_by, ttl_seconds: 30 }),
+                });
+            } catch (e) {
+                // Ignore
+            }
+        }
+    }, 10000); // 10s heartbeat pulse
+}
+
+function getLockedNodes(node) {
+    let result = [];
+    if (node.is_locked && node.locked_by) {
+        result.push(node);
+    }
+    if (node.children) {
+        for (const child of node.children) {
+            result = result.concat(getLockedNodes(child));
+        }
+    }
+    return result;
 }
 
 // ── Feedback Toast ────────────────────────────────────────────

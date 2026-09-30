@@ -31,7 +31,15 @@ class AuditLogger:
         self._log.append(entry)
         self._persist()
 
+    def log(self, action: str, agent_id: str, node_id: str, success: bool, detail: str = ""):
+        """Alias for engine compatibility."""
+        self.record(action, node_id, agent_id, success, detail)
+
     def get_log(self) -> list[dict]:
+        return list(self._log)
+
+    def get_logs(self) -> list[dict]:
+        """Alias for API routes."""
         return list(self._log)
 
     def _persist(self):

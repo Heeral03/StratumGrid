@@ -49,7 +49,7 @@
             <div class="header-actions">
                 <div class="status-badge" id="connection-chip">
                     <span class="pulse-dot"></span>
-                    <span>Engine Active</span>
+                    <span id="ws-status-text">WebSocket Active</span>
                 </div>
             </div>
         </div>
@@ -68,7 +68,7 @@
                 <h1 class="hero-title">High-Throughput Sub-Grid Spatial Arbitration</h1>
                 <p class="hero-subtitle">
                     FleetScale enforces exclusive spatial locking across physical warehouse hierarchies
-                    (<strong>Facility &rarr; Zone &rarr; Aisle &rarr; Rack &rarr; Bin</strong>), eliminating multi-bot spatial contention and race conditions in sub-millisecond execution time.
+                    (<strong>Facility &rarr; Zone &rarr; Aisle &rarr; Rack &rarr; Bin</strong>) with <strong>TTL Lease Heartbeats</strong> and <strong>WebSocket Event Streams</strong>.
                 </p>
 
                 <div class="hero-stats-row">
@@ -78,13 +78,13 @@
                     </div>
                     <div class="stat-divider"></div>
                     <div class="stat-pill">
-                        <span class="stat-val">Zero</span>
-                        <span class="stat-lbl">Deadlock Risk</span>
+                        <span class="stat-val">30s TTL</span>
+                        <span class="stat-lbl">Heartbeat Leases</span>
                     </div>
                     <div class="stat-divider"></div>
                     <div class="stat-pill">
-                        <span class="stat-val">Thread-Safe</span>
-                        <span class="stat-lbl">Mutex Isolation</span>
+                        <span class="stat-val">Real-Time</span>
+                        <span class="stat-lbl">WebSocket Stream</span>
                     </div>
                 </div>
 
@@ -101,8 +101,8 @@
             <div class="hero-right">
                 <div class="canvas-card">
                     <div class="canvas-header">
-                        <span class="canvas-title">Spatial Lock Propagation Model</span>
-                        <span class="canvas-tag">Real-Time State</span>
+                        <span class="canvas-title">Heartbeat Lease Renewal & Expiration</span>
+                        <span class="canvas-tag">30s TTL Active</span>
                     </div>
 
                     <div class="spatial-diagram">
@@ -143,8 +143,8 @@
                             <div class="diagram-node aisle-node locked">
                                 <span class="node-indicator danger"></span>
                                 <div class="node-details">
-                                    <span class="node-title">Aisle-A1</span>
-                                    <span class="node-agent">bot-alpha</span>
+                                    <span class="node-title">Aisle-A1 (bot-alpha)</span>
+                                    <span class="node-agent">Heartbeat: 10s | Lease: 28.4s</span>
                                 </div>
                             </div>
                             <div class="diagram-node aisle-node free">
@@ -158,7 +158,7 @@
                     </div>
 
                     <div class="canvas-footer">
-                        <span class="footer-note">Aisle-A1 locked &rarr; Ancestors automatically track descendant lock counters</span>
+                        <span class="footer-note">Bot pulses <code>/heartbeat</code> every 10s. If bot crashes, lease expires in 30s.</span>
                     </div>
                 </div>
             </div>
@@ -169,7 +169,7 @@
             <div class="section-heading">
                 <span class="section-tag">Core System Design</span>
                 <h2>Algorithmic Complexity & Architecture</h2>
-                <p>How FleetScale solves physical warehouse concurrency without expensive linear traversals.</p>
+                <p>How FleetScale handles multi-robot locks, heartbeats, and safe crash recovery.</p>
             </div>
 
             <div class="comparison-grid">
@@ -180,18 +180,18 @@
                     <ul class="comp-list">
                         <li>High contention delays during multi-robot dispatch</li>
                         <li>Risk of race conditions under concurrent requests</li>
-                        <li>High CPU overhead on large warehouse trees</li>
+                        <li>Stale locks remain held indefinitely if a bot crashes</li>
                     </ul>
                 </div>
 
                 <div class="comp-card fleetscale">
                     <div class="comp-badge good">FleetScale $O(h)$ Approach</div>
-                    <h3>Hierarchical Counter Propagation</h3>
-                    <p>Every tree node stores parent pointers and an atomic <code>locked_descendant_count</code> counter. Lock validation checks ancestor state and descendant counters in $O(h)$ time where $h$ is tree height.</p>
+                    <h3>Hierarchical Counter Propagation & TTL Leases</h3>
+                    <p>Every tree node stores parent pointers, descendant counters, and an atomic TTL lease timestamp (`expires_at`). Heartbeats renew active leases; missed heartbeats automatically trigger lock expiration.</p>
                     <ul class="comp-list">
-                        <li>Constant validation time bound by tree depth</li>
-                        <li>Atomic state mutation protected by thread locks</li>
-                        <li>Automatic child lock consolidation via lock upgrade</li>
+                        <li>Constant validation time bound by tree depth $O(h)$</li>
+                        <li>Thread-safe mutex isolation preventing race conditions</li>
+                        <li>Automatic crash recovery via 30s lease expiration</li>
                     </ul>
                 </div>
             </div>
@@ -201,7 +201,7 @@
         <div class="content-section">
             <div class="section-heading">
                 <span class="section-tag">API Specification</span>
-                <h2>REST API Endpoints</h2>
+                <h2>REST & WebSocket Endpoints</h2>
             </div>
 
             <div class="api-grid">
@@ -211,25 +211,25 @@
                         <code class="api-path">/api/v1/resource/lock</code>
                     </div>
                     <h4>Hierarchical Lock Acquisition</h4>
-                    <p>Validates ancestor freedom and zero descendant locks before acquiring an exclusive spatial lock on target node.</p>
+                    <p>Validates ancestor freedom and zero descendant locks before acquiring an exclusive 30s TTL lease lock on target node.</p>
                 </div>
 
                 <div class="api-card">
                     <div class="api-header">
                         <span class="http-method post">POST</span>
-                        <code class="api-path">/api/v1/resource/unlock</code>
+                        <code class="api-path">/api/v1/resource/heartbeat</code>
                     </div>
-                    <h4>Controlled Lock Release</h4>
-                    <p>Unlocks target node and decrements descendant counters upward along the parent chain.</p>
+                    <h4>Heartbeat Lease Renewal</h4>
+                    <p>Fired every 10 seconds by active bot. Extends node lease timestamp by another 30 seconds.</p>
                 </div>
 
                 <div class="api-card">
                     <div class="api-header">
-                        <span class="http-method post">POST</span>
-                        <code class="api-path">/api/v1/resource/upgrade</code>
+                        <span class="http-method ws">WS</span>
+                        <code class="api-path">/ws/events</code>
                     </div>
-                    <h4>Dynamic Zone Upgrade</h4>
-                    <p>Consolidates multiple child locks owned by the same agent into a single parent zone lock.</p>
+                    <h4>Real-Time WebSocket Stream</h4>
+                    <p>Broadcasts instant lock mutations, heartbeats, and automatic `LEASE_EXPIRED` audit events to connected clients.</p>
                 </div>
             </div>
         </div>
@@ -245,7 +245,7 @@
                 <div class="card-header">
                     <div class="header-title-group">
                         <h2>Warehouse Spatial Topology</h2>
-                        <span class="subtitle">Real-time dynamic tree node graph</span>
+                        <span class="subtitle">Real-time dynamic tree node graph with TTL badges</span>
                     </div>
                     <button class="btn btn-outline btn-sm" id="btn-refresh">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6"/><path d="M2 11.5a10 10 0 0118.8-4.3L21.5 8M22 12.5a10 10 0 01-18.8 4.3L2.5 16"/></svg>
@@ -259,7 +259,7 @@
                         <span class="chip-dot"></span> Free Spatial Node
                     </div>
                     <div class="legend-chip locked">
-                        <span class="chip-dot"></span> Exclusively Locked
+                        <span class="chip-dot"></span> Exclusively Locked (TTL Active)
                     </div>
                     <div class="legend-chip descendant-locked">
                         <span class="chip-dot"></span> Has Locked Descendant
@@ -279,7 +279,7 @@
                 <div class="card command-card">
                     <div class="card-header">
                         <h2>Command Center</h2>
-                        <span class="subtitle">Issue bot spatial requests</span>
+                        <span class="subtitle">Issue bot requests & heartbeats</span>
                     </div>
                     <div class="command-body">
                         <div class="form-group">
@@ -312,6 +312,29 @@
                                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>
                                 Upgrade
                             </button>
+                        </div>
+
+                        <!-- Heartbeat & Crash Simulator Controls -->
+                        <div class="simulator-panel">
+                            <div class="sim-header">
+                                <span class="sim-title">Heartbeat & Crash Simulator</span>
+                            </div>
+                            <div class="sim-actions">
+                                <button class="btn btn-hb" id="btn-send-hb">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+                                    Send Heartbeat
+                                </button>
+                                <button class="btn btn-crash" id="btn-sim-crash">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                    Simulate Bot Crash
+                                </button>
+                            </div>
+                            <div class="sim-toggle-row">
+                                <label class="toggle-lbl">
+                                    <input type="checkbox" id="chk-auto-hb" checked>
+                                    Auto-Pulse Heartbeat (every 10s)
+                                </label>
+                            </div>
                         </div>
 
                         <!-- Feedback Toast Notification -->
