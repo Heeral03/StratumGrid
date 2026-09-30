@@ -1,6 +1,6 @@
-# FleetScale
+# StratumGrid
 
-FleetScale is a high-performance backend resource arbiter that implements a Tree of Space hierarchical locking model for automated warehouse management systems.
+StratumGrid is a high-performance backend resource arbiter that implements a Tree of Space hierarchical locking model for automated warehouse management systems.
 
 ## Problem Statement
 
@@ -8,7 +8,7 @@ In automated fulfillment centers, Autonomous Mobile Robots (AMRs), pickers, and 
 
 ## Solution and Algorithmic Design
 
-FleetScale structures the warehouse as an M-ary dynamic tree node graph. Lock acquisition validates that no ancestor node is locked and no descendant node is occupied.
+StratumGrid structures the warehouse as an M-ary dynamic tree node graph. Lock acquisition validates that no ancestor node is locked and no descendant node is occupied.
 
 - Complexity Optimization: Each node maintains parent pointers and an atomic `locked_descendant_count` counter. Lock validation scales with tree height O(h) instead of total node count O(N).
 - Concurrency Guarantee: All state mutations are protected by a threading mutex lock to prevent race conditions during multi-agent requests.
