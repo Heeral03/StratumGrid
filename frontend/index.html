@@ -204,13 +204,30 @@
     <section id="dashboard-view" class="view-section">
         <div class="dashboard-grid">
 
-            <!-- Left Column: Spatial Topology Graph -->
+            <!-- Left Column: Spatial Topology Visualizer & 2D Canvas -->
             <div class="card topology-card">
                 <div class="card-header">
                     <div class="header-title-group">
                         <h2>Warehouse Spatial Topology</h2>
-                        <span class="subtitle">Real-time dynamic tree node graph with TTL badges</span>
+                        <span class="subtitle">Interactive spatial tree and 2D floor plan layout</span>
                     </div>
+
+                    <!-- Mode Toggle Switcher -->
+                    <div class="view-mode-toggle">
+                        <button class="mode-toggle-btn active" id="btn-mode-tree">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v8M12 10l-4 4M12 10l4 4M4 18h16"/></svg>
+                            Tree View
+                        </button>
+                        <button class="mode-toggle-btn" id="btn-mode-canvas">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+                            2D Floor Plan
+                        </button>
+                        <button class="mode-toggle-btn" id="btn-mode-split">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+                            Split View
+                        </button>
+                    </div>
+
                     <button class="btn btn-outline btn-sm" id="btn-refresh">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6"/><path d="M2 11.5a10 10 0 0118.8-4.3L21.5 8M22 12.5a10 10 0 01-18.8 4.3L2.5 16"/></svg>
                         Refresh
@@ -230,9 +247,25 @@
                     </div>
                 </div>
 
-                <!-- Tree Viewport -->
-                <div class="tree-viewport" id="tree-container">
-                    <div class="tree-loading">Loading spatial hierarchy...</div>
+                <!-- Combined Spatial Viewport (Tree + 2D Floor Canvas) -->
+                <div class="spatial-viewport-container" id="spatial-viewport">
+                    
+                    <!-- 1. Tree Viewport -->
+                    <div class="tree-viewport active" id="tree-container">
+                        <div class="tree-loading">Loading spatial hierarchy...</div>
+                    </div>
+
+                    <!-- 2. 2D Floor Plan Canvas Viewport -->
+                    <div class="canvas-viewport" id="canvas-container">
+                        <canvas id="warehouse-canvas" width="840" height="540"></canvas>
+
+                        <!-- Canvas Floating Hover Tooltip -->
+                        <div class="canvas-tooltip hidden" id="canvas-tooltip">
+                            <div class="tt-header" id="tt-title">Aisle-A1</div>
+                            <div class="tt-body" id="tt-body">Type: AISLE | Status: Free</div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
 
