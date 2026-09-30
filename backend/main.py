@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="FleetScale — Dynamic Warehouse Sub-Grid Spatial Arbiter",
+    title="StratumGrid — Dynamic Warehouse Sub-Grid Spatial Arbiter",
     description="High-performance $M$-ary tree spatial arbiter with thread-safe locking, TTL heartbeats, and WebSocket streaming.",
     version="2.0.0",
     lifespan=lifespan
