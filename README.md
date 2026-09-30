@@ -49,6 +49,7 @@ The system follows a decoupled client-server model:
 
 - Core Engine: Python 3.12, Threading, Mutex Synchronization
 - Backend API: FastAPI, Pydantic, Uvicorn
+- Testing Framework: Pytest, Concurrent ThreadPoolExecutor, Sync Barriers
 - Frontend UI: HTML5, CSS3 (Light Theme Design System), Vanilla JavaScript
 - Audit Persistence: JSON File Ledger
 
@@ -60,17 +61,18 @@ The system follows a decoupled client-server model:
 - GET `/api/v1/resource/status` - Returns complete tree hierarchy snapshot
 - GET `/api/v1/audit` - Returns append-only transaction ledger
 
-## Verification Results
+## Concurrency Verification & Unit Tests
 
-All automated test suites and end-to-end browser simulations passed:
+The test suite in `tests/` uses `pytest` and multi-threaded execution barriers (`threading.Barrier`, `ThreadPoolExecutor`) to prove thread safety under simultaneous contention:
 
-1. Hierarchical Lock Acquisition: Successfully locks target nodes (Aisle, Rack, Bin).
-2. Duplicate Rejection: Rejects lock attempt if target node is already locked.
-3. Ancestor Conflict Prevention: Rejects lock attempt on child nodes if any ancestor is locked.
-4. Descendant Conflict Prevention: Rejects lock attempt on parent nodes if any descendant is locked.
-5. Controlled Unlock: Releases node and updates ancestor counters.
-6. Lock Upgrade Consolidation: Successfully converts child locks into a parent lock.
-7. Audit Trail Integrity: 100% of lock/unlock/upgrade events logged with timestamps and agent IDs.
+1. Simultaneous Same-Node Contention: 20 parallel threads attempt to lock the exact same node at the exact same instant. Verifies exactly 1 thread succeeds, 19 fail, and descendant counters remain mathematically precise.
+2. Overlapping Ancestor/Descendant Contention: 24 concurrent threads request parent zones and child bins simultaneously. Verifies parent and child nodes are never concurrently locked.
+3. High-Concurrency Stress Test: 50 concurrent threads execute continuous lock/unlock cycles across random spatial nodes. Verifies zero deadlocks and 100% counter recovery back to 0.
+
+Run the test suite:
+```bash
+pytest -v
+```
 
 ## Getting Started
 
